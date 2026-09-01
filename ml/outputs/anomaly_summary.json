@@ -9,10 +9,10 @@
     "low": 0
   },
   "category_distribution": {
-    "financial": 172,
-    "temporal": 341,
-    "vendor": 296,
-    "compliance": 39,
+    "financial": 166,
+    "temporal": 325,
+    "vendor": 233,
+    "compliance": 124,
     "statistical": 43
   },
   "status_distribution": {
@@ -119,5 +119,5 @@
     },
     "anomaly_flag_threshold": 0.4
   },
-  "pipeline_run_timestamp": "2026-09-01T10:26:16.982254+00:00"
+  "pipeline_run_timestamp": "2026-09-01T11:22:39.186661+00:00"
 }
