@@ -1,0 +1,24 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.local
+
+# VS Code local settings
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python generated output
+*.pyo
+# ML generated outputs and models
+*.joblib
