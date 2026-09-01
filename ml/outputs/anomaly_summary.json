@@ -9,10 +9,17 @@
     "low": 0
   },
   "category_distribution": {
+<<<<<<< HEAD
     "financial": 166,
     "temporal": 325,
     "vendor": 233,
     "compliance": 124,
+=======
+    "financial": 257,
+    "temporal": 184,
+    "vendor": 369,
+    "compliance": 38,
+>>>>>>> b06c833a00b6d38f7f7ca9987b2d842308a16a1a
     "statistical": 43
   },
   "status_distribution": {
@@ -119,5 +126,9 @@
     },
     "anomaly_flag_threshold": 0.4
   },
+<<<<<<< HEAD
   "pipeline_run_timestamp": "2026-09-01T11:22:39.186661+00:00"
+=======
+  "pipeline_run_timestamp": "2026-09-01T10:33:35.647307+00:00"
+>>>>>>> b06c833a00b6d38f7f7ca9987b2d842308a16a1a
 }

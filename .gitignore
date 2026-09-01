@@ -21,7 +21,6 @@ Thumbs.db
 # Python generated output
 *.pyo
 
-ml/outputs/anomaly_scores.csv
-ml/outputs/anomaly_flagged.csv
-ml/outputs/anomaly_summary.json
+ml/outputs/*.csv
+ml/outputs/*.json
 ml/outputs/model_artifacts/*.joblib
