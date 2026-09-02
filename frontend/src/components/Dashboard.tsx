@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { motion, useInView } from 'framer-motion'
-import { ArrowLeft, ArrowRight, ArrowUpRight, Bell, ChevronRight, CircleHelp, FolderKanban, LayoutDashboard, ListFilter, Moon, Search, Settings, ShieldCheck, Sun, TrendingUp } from 'lucide-react'
+import { motion, AnimatePresence, useInView } from 'framer-motion'
+import { useTheme } from 'next-themes'
+import { ArrowLeft, ArrowRight, ArrowUpRight, Bell, ChevronRight, CircleHelp, FolderKanban, LayoutDashboard, ListFilter, Menu, Moon, Search, Settings, ShieldCheck, Sun, TrendingUp, X } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from 'recharts'
 import { anomalyBreakdown, formatINR, getSummary, monthlyTrend, projects, regionalRisk, riskDistribution, statusLabels, type Project, type ProjectStatus, type RiskTier } from '@/lib/types'
 
@@ -24,12 +25,129 @@ function CountUp({ value }: { value: number }) {
 function Reveal({ children, index = 0, className = '' }: { children: React.ReactNode; index?: number; className?: string }) { return <motion.div className={className} variants={rise} initial="hidden" animate="show" transition={{ duration: .45, ease: 'easeOut', delay: Math.min(index, 3) * .05 }}>{children}</motion.div> }
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const [dark, setDark] = useState(false)
-  useEffect(() => { setDark(window.localStorage.getItem('nirikshan-theme') === 'dark') }, [])
-  useEffect(() => { if (typeof window !== 'undefined') window.localStorage.setItem('nirikshan-theme', dark ? 'dark' : 'light') }, [dark])
-  return <div className={dark ? 'dark min-h-screen bg-background text-foreground' : 'min-h-screen bg-background text-foreground'}><aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-sidebar px-5 py-6 lg:flex lg:flex-col"><div className="flex items-center gap-3 px-2"><div className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground"><ShieldCheck size={20} /></div><div><p className="font-serif text-xl font-bold tracking-tight">Nirikshan</p><p className="text-[10px] uppercase tracking-[.2em] text-muted-foreground">Authority console</p></div></div><nav className="mt-12 space-y-1"><Nav href="/" icon={<LayoutDashboard size={17} />} label="Oversight dashboard" /><Nav href="/projects" icon={<FolderKanban size={17} />} label="Project registry" /><Nav href="/analytics" icon={<TrendingUp size={17} />} label="Analytics & trends" /></nav><div className="mt-auto rounded-2xl bg-accent p-4 text-sm"><p className="font-semibold">Review with confidence</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Nirikshan surfaces unusual patterns for human verification.</p><Link href="/projects" className="mt-4 flex items-center gap-1 text-xs font-semibold text-primary">Open registry <ArrowUpRight size={13} /></Link></div></aside><div className="lg:pl-64"><header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-background/90 px-5 backdrop-blur md:px-8"><div className="flex items-center gap-3"><span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground lg:hidden"><ShieldCheck size={17} /></span><div className="relative hidden md:block"><Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} /><input aria-label="Search projects" placeholder="Search projects, locations..." className="h-9 w-72 rounded-lg border border-input bg-card pl-9 text-sm outline-none focus:ring-2 focus:ring-ring" /></div></div><div className="flex items-center gap-2"><button aria-label="Toggle theme" onClick={() => setDark(!dark)} className="grid size-9 place-items-center rounded-lg border border-border hover:bg-accent">{dark ? <Sun size={17} /> : <Moon size={17} />}</button><button aria-label="Help" className="hidden size-9 place-items-center rounded-lg border border-border hover:bg-accent md:grid"><CircleHelp size={17} /></button><button aria-label="Settings" className="grid size-9 place-items-center rounded-lg border border-border hover:bg-accent"><Settings size={17} /></button><div className="ml-1 grid size-9 place-items-center rounded-full bg-accent text-xs font-bold text-primary">AS</div></div></header><main className="mx-auto max-w-[1500px] px-5 py-8 md:px-8">{children}</main></div></div>
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+
+  const navLinks = (
+    <>
+      <Nav href="/" icon={<LayoutDashboard size={17} />} label="Oversight dashboard" onClick={() => setMobileOpen(false)} />
+      <Nav href="/projects" icon={<FolderKanban size={17} />} label="Project registry" onClick={() => setMobileOpen(false)} />
+      <Nav href="/analytics" icon={<TrendingUp size={17} />} label="Analytics & trends" onClick={() => setMobileOpen(false)} />
+    </>
+  )
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-sidebar px-5 py-6 lg:flex lg:flex-col">
+        <div className="flex items-center gap-3 px-2">
+          <div className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground">
+            <ShieldCheck size={20} />
+          </div>
+          <div>
+            <p className="font-serif text-xl font-bold tracking-tight">Nirikshan</p>
+            <p className="text-[10px] uppercase tracking-[.2em] text-muted-foreground">Authority console</p>
+          </div>
+        </div>
+        <nav className="mt-12 space-y-1">{navLinks}</nav>
+        <div className="mt-auto rounded-2xl bg-accent p-4 text-sm">
+          <p className="font-semibold">Review with confidence</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Nirikshan surfaces unusual patterns for human verification.
+          </p>
+          <Link href="/projects" className="mt-4 flex items-center gap-1 text-xs font-semibold text-primary">
+            Open registry <ArrowUpRight size={13} />
+          </Link>
+        </div>
+      </aside>
+
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setMobileOpen(false)}
+            />
+            <motion.aside
+              className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-border bg-sidebar px-5 py-6 lg:hidden"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <p className="font-serif text-xl font-bold tracking-tight">Nirikshan</p>
+                </div>
+                <button aria-label="Close menu" onClick={() => setMobileOpen(false)} className="grid size-9 place-items-center rounded-lg border border-border">
+                  <X size={17} />
+                </button>
+              </div>
+              <nav className="mt-10 space-y-1">{navLinks}</nav>
+              <div className="mt-auto rounded-2xl bg-accent p-4 text-sm">
+                <p className="font-semibold">Review with confidence</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Nirikshan surfaces unusual patterns for human verification.
+                </p>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      <div className="lg:pl-64">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-background/90 px-5 backdrop-blur md:px-8">
+          <div className="flex items-center gap-3">
+            <button aria-label="Open menu" onClick={() => setMobileOpen(true)} className="grid size-9 place-items-center rounded-lg border border-border lg:hidden">
+              <Menu size={17} />
+            </button>
+            <div className="relative hidden md:block">
+              <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
+              <input
+                aria-label="Search projects"
+                placeholder="Search projects, locations..."
+                className="h-9 w-72 rounded-lg border border-input bg-card pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              aria-label="Toggle theme"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="grid size-9 place-items-center rounded-lg border border-border hover:bg-accent"
+            >
+              {mounted && (theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />)}
+            </button>
+            <button aria-label="Help" className="hidden size-9 place-items-center rounded-lg border border-border hover:bg-accent md:grid">
+              <CircleHelp size={17} />
+            </button>
+            <button aria-label="Settings" className="grid size-9 place-items-center rounded-lg border border-border hover:bg-accent">
+              <Settings size={17} />
+            </button>
+            <div className="ml-1 grid size-9 place-items-center rounded-full bg-accent text-xs font-bold text-primary">AS</div>
+          </div>
+        </header>
+        <main className="mx-auto max-w-[1500px] px-5 py-8 md:px-8">{children}</main>
+      </div>
+    </div>
+  )
 }
-function Nav({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) { return <Link href={href} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">{icon}{label}</Link> }
+function Nav({ href, icon, label, onClick }: { href: string; icon: React.ReactNode; label: string; onClick?: () => void }) {
+  return (
+    <Link href={href} onClick={onClick} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
+      {icon}{label}
+    </Link>
+  )
+}
 export function PageHeading({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: React.ReactNode }) { return <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[.18em] text-primary">{eyebrow}</p><h1 className="font-serif text-3xl font-bold tracking-tight md:text-4xl">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p></div>{action}</div> }
 export function MetricCards() { const s = getSummary(); const cards = [['Projects monitored', s.totalProjects, 'Across 18 regions', 'FolderKanban'], ['Sanctioned value', s.totalSanctionedValue, 'Active portfolio', 'TrendingUp'], ['Flagged for review', s.flaggedCount, 'Requires verification', 'Bell'], ['High priority', s.highPriorityCount, 'Priority investigation queue', 'ShieldCheck']] as const; return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value, note, icon], i) => <Reveal key={label} index={i}><div className="rounded-2xl border border-border bg-card p-5 shadow-sm"><div className="flex items-start justify-between"><p className="text-sm text-muted-foreground">{label}</p><span className="text-primary">{icon === 'TrendingUp' ? <TrendingUp size={18} /> : icon === 'Bell' ? <Bell size={18} /> : icon === 'ShieldCheck' ? <ShieldCheck size={18} /> : <FolderKanban size={18} />}</span></div><p className="mt-4 text-3xl font-semibold tracking-tight">{label === 'Sanctioned value' ? formatINR(value) : <CountUp value={value} />}</p><p className="mt-1 text-xs text-muted-foreground">{note}</p></div></Reveal>)}</div> }
 export function RiskChart() { return <Reveal><Panel title="Risk distribution" note="Current portfolio"><div className="flex h-64 items-center gap-5"><ResponsiveContainer width="58%" height="100%"><PieChart><Pie data={riskDistribution} dataKey="value" innerRadius={65} outerRadius={90} paddingAngle={3} animationDuration={800} animationEasing="ease-out">{riskDistribution.map(x => <Cell key={x.name} fill={x.fill} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer><div className="space-y-4">{riskDistribution.map(x => <div key={x.name} className="flex items-center gap-2 text-sm"><span className="size-2.5 rounded-full" style={{ background: x.fill }} /><span className="text-muted-foreground">{x.name}</span><b className="ml-auto"><CountUp value={x.value} /></b></div>)}</div></div></Panel></Reveal> }
