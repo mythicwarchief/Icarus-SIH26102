@@ -1,28 +1,62 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence, useInView } from 'framer-motion'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from 'next-themes'
-import { ArrowLeft, ArrowRight, ArrowUpRight, Bell, ChevronRight, CircleHelp, FolderKanban, LayoutDashboard, ListFilter, Menu, Moon, Search, Settings, ShieldCheck, Sun, TrendingUp, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ArrowUpRight, Bell, ChevronRight, CircleHelp, FolderKanban, LayoutDashboard, ListFilter, LogOut, Menu, Moon, RotateCcw, Search, Settings, ShieldCheck, Sun, TrendingUp, X } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from 'recharts'
 import { anomalyBreakdown, formatINR, getSummary, monthlyTrend, projects, regionalRisk, riskDistribution, statusLabels, type Project, type ProjectStatus, type RiskTier } from '@/lib/types'
 
 const rise = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } }
+
 function CountUp({ value }: { value: number }) {
-  const inView = useInView({ once: true })
   const [count, setCount] = useState(0)
   useEffect(() => {
-    if (!inView) return
     const start = performance.now()
     let frame = 0
     const tick = (now: number) => { const progress = Math.min((now - start) / 800, 1); setCount(Math.round(value * (1 - Math.pow(1 - progress, 3)))); if (progress < 1) frame = requestAnimationFrame(tick) }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [inView, value])
+  }, [value])
   return <span>{count}</span>
 }
+
 function Reveal({ children, index = 0, className = '' }: { children: React.ReactNode; index?: number; className?: string }) { return <motion.div className={className} variants={rise} initial="hidden" animate="show" transition={{ duration: .45, ease: 'easeOut', delay: Math.min(index, 3) * .05 }}>{children}</motion.div> }
+
+function HeaderPopover({ trigger, children, align = 'right' }: { trigger: React.ReactNode; children: React.ReactNode; align?: 'left' | 'right' }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(o => !o)} className="grid size-9 place-items-center rounded-lg border border-border hover:bg-accent">
+        {trigger}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+            className={`absolute top-11 z-20 w-72 rounded-xl border border-border bg-card p-4 shadow-lg ${align === 'right' ? 'right-0' : 'left-0'}`}
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme()
@@ -127,13 +161,44 @@ export function Shell({ children }: { children: React.ReactNode }) {
             >
               {mounted && (theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />)}
             </button>
-            <button aria-label="Help" className="hidden size-9 place-items-center rounded-lg border border-border hover:bg-accent md:grid">
-              <CircleHelp size={17} />
-            </button>
-            <button aria-label="Settings" className="grid size-9 place-items-center rounded-lg border border-border hover:bg-accent">
-              <Settings size={17} />
-            </button>
-            <div className="ml-1 grid size-9 place-items-center rounded-full bg-accent text-xs font-bold text-primary">AS</div>
+
+            <div className="hidden md:block">
+              <HeaderPopover trigger={<CircleHelp size={17} />}>
+                <p className="font-semibold">How Nirikshan works</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  Risk scores and flags are system-generated signals, not findings. Every flagged project surfaces
+                  unusual patterns — cost, delay, or duplication — for a human reviewer to verify before any action is taken.
+                </p>
+              </HeaderPopover>
+            </div>
+
+            <HeaderPopover trigger={<Settings size={17} />}>
+              <p className="font-semibold">Settings</p>
+              <div className="mt-3 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Theme</span>
+                <button
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-accent"
+                >
+                  {mounted && (theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />)}
+                  {mounted && (theme === 'dark' ? 'Dark' : 'Light')}
+                </button>
+              </div>
+              <button
+                onClick={() => window.location.href = '/projects'}
+                className="mt-3 flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent"
+              >
+                <RotateCcw size={14} /> Reset registry filters
+              </button>
+            </HeaderPopover>
+
+            <HeaderPopover trigger={<span className="text-xs font-bold text-primary">AS</span>}>
+              <p className="font-semibold">Ananya Sharma</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Authority reviewer · MPLADS oversight</p>
+              <button className="mt-3 flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent">
+                <LogOut size={14} /> Sign out
+              </button>
+            </HeaderPopover>
           </div>
         </header>
         <main className="mx-auto max-w-[1500px] px-5 py-8 md:px-8">{children}</main>
@@ -141,6 +206,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     </div>
   )
 }
+
 function Nav({ href, icon, label, onClick }: { href: string; icon: React.ReactNode; label: string; onClick?: () => void }) {
   return (
     <Link href={href} onClick={onClick} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
@@ -155,10 +221,9 @@ export function AnomalyChart() { return <Reveal index={1}><Panel title="Anomaly 
 export function TrendMini() { return <Reveal><Panel title="Flagging activity" note="Last 6 months"><div className="h-64"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthlyTrend}><CartesianGrid vertical={false} strokeDasharray="3 3" /><XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis hide /><Tooltip /><Line type="monotone" dataKey="flagged" stroke="#c95c4b" strokeWidth={3} dot={false} animationDuration={800} animationEasing="ease-out" /><Line type="monotone" dataKey="reviewed" stroke="#2f8f83" strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" /></LineChart></ResponsiveContainer></div></Panel></Reveal> }
 export function Panel({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) { return <section className="rounded-2xl border border-border bg-card p-5 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">{title}</h2>{note && <span className="text-xs text-muted-foreground">{note}</span>}</div>{children}</section> }
 export function Queue() { const queue = projects.filter(p => p.isFlagged).sort((a, b) => b.riskScore - a.riskScore).slice(0, 6); return <Panel title="Priority investigation queue" note={`${queue.length} surfaced`}><div className="divide-y divide-border">{queue.map(p => <Link href={`/projects/${p.id}`} key={p.id} className="flex items-center gap-4 py-3 first:pt-1 last:pb-1"><span className={`grid size-9 place-items-center rounded-xl text-sm font-bold ${p.riskTier === 'high' ? 'bg-risk-high/10 text-risk-high' : 'bg-risk-medium/10 text-risk-medium'}`}><CountUp value={p.riskScore} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{p.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{p.location} · {p.anomalies?.[0]?.explanation}</p></div><ChevronRight size={17} className="text-muted-foreground" /></Link>)}</div></Panel> }
-export function Dashboard() { return <Shell><PageHeading eyebrow="MPLADS oversight / 01" title="Good morning, Ananya." description="A clear view of project health, unusual patterns, and the works that need your attention." action={<Link href="/projects" className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">Review projects <ArrowUpRight size={16} /></Link>} /><MetricCards /><div className="mt-5 grid gap-5 lg:grid-cols-2"><RiskChart /><AnomalyChart /></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.25fr_.75fr]"><Queue /><TrendMini /></div><p className="mt-8 text-center text-xs text-muted-foreground">Signals are system-generated indicators. Every flag requires human verification before action.</p></Shell> }
+export function Dashboard() { return <Shell><PageHeading eyebrow="MPLADS oversight / 01" title="Good morning !!!" description="A clear view of project health, unusual patterns, and the works that need your attention." action={<Link href="/projects" className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">Review projects <ArrowUpRight size={16} /></Link>} /><MetricCards /><div className="mt-5 grid gap-5 lg:grid-cols-2"><RiskChart /><AnomalyChart /></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.25fr_.75fr]"><Queue /><TrendMini /></div><p className="mt-8 text-center text-xs text-muted-foreground">Signals are system-generated indicators. Every flag requires human verification before action.</p></Shell> }
 export function ProjectRow({ p }: { p: Project }) { return <Link href={`/projects/${p.id}`} className="grid grid-cols-[1fr_110px_100px_95px_30px] items-center gap-3 border-b border-border px-4 py-4 hover:bg-accent/50"><div><p className="text-sm font-medium">{p.name}</p><p className="text-xs text-muted-foreground">{p.id} · {p.location}, {p.region}</p></div><span className="text-sm">{formatINR(p.sanctionedAmount)}</span><span className="text-sm">{statusLabels[p.status]}</span><span className={`text-sm font-semibold ${p.riskTier === 'high' ? 'text-risk-high' : p.riskTier === 'medium' ? 'text-risk-medium' : 'text-risk-low'}`}>{p.riskScore} / 100</span><ChevronRight size={16} className="text-muted-foreground" /></Link> }
-export function Registry() { const [query, setQuery] = useState(''); const [risk, setRisk] = useState<'all' | RiskTier>('all'); const [status, setStatus] = useState<'all' | ProjectStatus>('all'); const [page, setPage] = useState(1); const pageSize = 20; const filtered = useMemo(() => projects.filter(p => `${p.name} ${p.location} ${p.id}`.toLowerCase().includes(query.toLowerCase()) && (risk === 'all' || p.riskTier === risk) && (status === 'all' || p.status === status)), [query, risk, status]); const pages = Math.max(1, Math.ceil(filtered.length / pageSize)); const visible = filtered.slice((page - 1) * pageSize, page * pageSize); useEffect(() => setPage(1), [query, risk, status]); return <Shell><PageHeading eyebrow="Project registry / 02" title="All projects" description="Search and review the full MPLADS portfolio. Risk scores prioritize attention; they do not determine outcomes." action={<button className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold"><ListFilter size={16} /> Filters</button>} /><div className="mb-5 flex flex-col gap-3 md:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-3 text-muted-foreground" size={16} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by project, ID, or location" className="h-10 w-full rounded-xl border border-input bg-card pl-9 text-sm outline-none focus:ring-2 focus:ring-ring" /></div><select aria-label="Risk tier filter" value={risk} onChange={e => setRisk(e.target.value as 'all' | RiskTier)} className="h-10 rounded-xl border border-input bg-card px-3 text-sm"><option value="all">All risk tiers</option><option value="high">High risk</option><option value="medium">Medium risk</option><option value="low">Low risk</option></select><select aria-label="Project status filter" value={status} onChange={e => setStatus(e.target.value as 'all' | ProjectStatus)} className="h-10 rounded-xl border border-input bg-card px-3 text-sm"><option value="all">All statuses</option><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="not_started">Not started</option></select></div><div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"><div className="hidden grid-cols-[1fr_110px_100px_95px_30px] gap-3 border-b border-border bg-accent/50 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:grid"><span>Project</span><span>Sanctioned</span><span>Status</span><span>Risk score</span><span /></div><div>{visible.map(p => <ProjectRow key={p.id} p={p} />)}</div></div><div className="mt-4 flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><span>Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length} projects</span><div className="flex items-center gap-1"><button aria-label="Previous page" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="grid size-8 place-items-center rounded-lg border border-border disabled:opacity-40"><ArrowLeft size={14} /></button>{Array.from({ length: pages }, (_, i) => i + 1).map(n => <button key={n} aria-label={`Page ${n}`} onClick={() => setPage(n)} className={`grid size-8 place-items-center rounded-lg border text-xs ${n === page ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:bg-accent'}`}>{n}</button>)}<button aria-label="Next page" disabled={page === pages} onClick={() => setPage(p => p + 1)} className="grid size-8 place-items-center rounded-lg border border-border disabled:opacity-40"><ArrowRight size={14} /></button></div></div></Shell> }
+export function Registry() { const [query, setQuery] = useState(''); const [risk, setRisk] = useState<'all' | RiskTier>('all'); const [status, setStatus] = useState<'all' | ProjectStatus>('all'); const [page, setPage] = useState(1); const pageSize = 20; const filtered = useMemo(() => projects.filter(p => `${p.name} ${p.location} ${p.id}`.toLowerCase().includes(query.toLowerCase()) && (risk === 'all' || p.riskTier === risk) && (status === 'all' || p.status === status)), [query, risk, status]); const pages = Math.max(1, Math.ceil(filtered.length / pageSize)); const visible = filtered.slice((page - 1) * pageSize, page * pageSize); useEffect(() => setPage(1), [query, risk, status]); return <Shell><PageHeading eyebrow="Project registry / 02" title="All projects" description="Search and review the full MPLADS portfolio. Risk scores prioritize attention; they do not determine outcomes." action={<button className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold"><ListFilter size={16} /> Filters</button>} /><div className="mb-5 flex flex-col gap-3 md:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-3 text-muted-foreground" size={16} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by project, ID, or location" className="h-10 w-full rounded-xl border border-input bg-card pl-9 text-sm outline-none focus:ring-2 focus:ring-ring" /></div><select aria-label="Risk tier filter" value={risk} onChange={e => setRisk(e.target.value as 'all' | RiskTier)} className="h-10 rounded-xl border border-input bg-card px-3 text-sm"><option value="all">All risk tiers</option><option value="high">High risk</option><option value="medium">Medium risk</option><option value="low">Low risk</option></select><select aria-label="Project status filter" value={status} onChange={e => setStatus(e.target.value as 'all' | ProjectStatus)} className="h-10 rounded-xl border border-input bg-card px-3 text-sm"><option value="all">All statuses</option><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="not_started">Not started</option></select></div><div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"><div className="hidden grid-cols-[1fr_110px_100px_95px_30px] gap-3 border-b border-border bg-accent/50 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:grid"><span>Project</span><span>Sanctioned</span><span>Status</span><span>Risk score</span><span /></div><div>{visible.length > 0 ? visible.map(p => <ProjectRow key={p.id} p={p} />) : <div className="flex flex-col items-center gap-3 px-4 py-16 text-center"><Search size={28} className="text-muted-foreground" /><p className="font-semibold">No projects match your filters</p><button onClick={() => { setQuery(''); setRisk('all'); setStatus('all') }} className="mt-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold hover:bg-accent">Clear all filters</button></div>}</div></div><div className="mt-4 flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><span>Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length} projects</span><div className="flex items-center gap-1"><button aria-label="Previous page" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="grid size-8 place-items-center rounded-lg border border-border disabled:opacity-40"><ArrowLeft size={14} /></button>{Array.from({ length: pages }, (_, i) => i + 1).map(n => <button key={n} aria-label={`Page ${n}`} onClick={() => setPage(n)} className={`grid size-8 place-items-center rounded-lg border text-xs ${n === page ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:bg-accent'}`}>{n}</button>)}<button aria-label="Next page" disabled={page === pages} onClick={() => setPage(p => p + 1)} className="grid size-8 place-items-center rounded-lg border border-border disabled:opacity-40"><ArrowRight size={14} /></button></div></div></Shell> }
 export function DuplicateMatchPanel({ project }: { project: Project }) { const match = project.duplicateMatch; if (!match) return null; return <Panel title="Potential duplicate match" note="Requires human verification"><div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-stretch"><div className="rounded-xl border border-border p-4"><p className="text-xs text-muted-foreground">Current project</p><p className="mt-2 font-semibold">{project.name}</p><p className="mt-1 text-xs text-muted-foreground">{project.id}</p></div><div className="flex flex-col items-center justify-center rounded-xl bg-risk-medium/10 px-5 py-3 text-center"><p className="text-2xl font-bold text-risk-medium"><CountUp value={match.similarityScore} />%</p><p className="text-xs text-muted-foreground">similarity</p></div><div className="rounded-xl border border-border p-4"><p className="text-xs text-muted-foreground">Matched project</p><p className="mt-2 font-semibold">{match.matchedProjectName}</p><p className="mt-1 text-xs text-muted-foreground">{match.matchedProjectId}</p></div></div><p className="mt-4 text-sm leading-relaxed text-muted-foreground"><span className="font-medium text-foreground">Why it surfaced:</span> {match.reason}</p></Panel> }
 export function Investigation({ project }: { project: Project }) { return <Shell><Link href="/projects" className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft size={15} /> Back to registry</Link><PageHeading eyebrow="Project investigation / 03" title={project.name} description={`${project.id} · ${project.location}, ${project.region}`} action={<span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${project.isFlagged ? 'bg-risk-medium/10 text-risk-medium' : 'bg-risk-low/10 text-risk-low'}`}>{project.isFlagged ? 'Flagged for review' : 'No active flags'}</span>} /><div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]"><Panel title="Risk score" note="Explainable indicator"><div className="flex items-center gap-6"><div className={`grid size-32 place-items-center rounded-full border-[12px] ${project.riskTier === 'high' ? 'border-risk-high/30 text-risk-high' : project.riskTier === 'medium' ? 'border-risk-medium/30 text-risk-medium' : 'border-risk-low/30 text-risk-low'}`}><span className="text-3xl font-bold"><CountUp value={project.riskScore} /></span></div><div><p className="font-semibold capitalize">{project.riskTier} priority</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{project.isFlagged ? 'This project shows unusual behavior compared with similar works and requires human verification.' : 'No unusual behavior is currently surfaced by the screening rules.'}</p></div></div></Panel><Panel title="Key financials"><div className="grid grid-cols-2 gap-5">{[['Sanctioned', formatINR(project.sanctionedAmount)], ['Released', formatINR(project.releasedAmount)], ['Utilized', formatINR(project.utilizedAmount)], ['Planned duration', `${project.plannedDuration} days`]].map(([a, b]) => <div key={a}><p className="text-xs text-muted-foreground">{a}</p><p className="mt-1 text-lg font-semibold">{b}</p></div>)}</div></Panel></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><Panel title="Why this was flagged" note="Plain-English explanation">{project.anomalies?.length ? <div className="space-y-3">{project.anomalies.map((a, i) => <div key={`${a.type}-${i}`} className="rounded-xl bg-accent p-4"><div className="flex items-center justify-between"><p className="font-medium capitalize">{a.type.replaceAll('_', ' ')}</p><span className="text-xs text-muted-foreground">{Math.round(a.confidence * 100)}% confidence</span></div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{a.explanation}</p></div>)}</div> : <p className="text-sm text-muted-foreground">No active screening signals. Continue routine monitoring.</p>}</Panel><Panel title="Project timeline"><div className="space-y-4 text-sm"><div><p className="text-xs text-muted-foreground">Sanctioned</p><p className="mt-1">{project.sanctionedDate}</p></div><div><p className="text-xs text-muted-foreground">Work started</p><p className="mt-1">{project.workStartDate ?? 'Not started'}</p></div><div><p className="text-xs text-muted-foreground">Completed</p><p className="mt-1">{project.completedDate ?? 'In progress'}</p></div></div></Panel></div>{project.duplicateMatch && <div className="mt-5"><DuplicateMatchPanel project={project} /></div>}<p className="mt-8 text-center text-xs text-muted-foreground">This is an explainable screening signal, not a finding. Verify against source records before taking action.</p></Shell> }
 export function Analytics() { return <Shell><PageHeading eyebrow="Analytics / 04" title="Portfolio trends" description="Understand how screening signals and expenditure patterns move across the portfolio." /><div className="grid gap-5 lg:grid-cols-2"><Panel title="Flagging and review trend" note="Monthly activity"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthlyTrend}><CartesianGrid vertical={false} strokeDasharray="3 3" /><XAxis dataKey="month" /><YAxis /><Tooltip /><Line dataKey="flagged" name="Flagged" stroke="#c95c4b" strokeWidth={3} animationDuration={800} animationEasing="ease-out" /><Line dataKey="reviewed" name="Reviewed" stroke="#2f8f83" strokeWidth={3} animationDuration={800} animationEasing="ease-out" /></LineChart></ResponsiveContainer></div></Panel><Panel title="Regional risk index" note="Relative indicator"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={regionalRisk}><CartesianGrid vertical={false} strokeDasharray="3 3" /><XAxis dataKey="region" tick={{ fontSize: 10 }} /><YAxis /><Tooltip /><Bar dataKey="risk" name="Risk index" fill="#d89b3d" radius={[5, 5, 0, 0]} animationDuration={800} animationEasing="ease-out" /></BarChart></ResponsiveContainer></div></Panel></div></Shell> }
-export function MobileNav() { return null }
