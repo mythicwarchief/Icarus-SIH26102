@@ -21,6 +21,4 @@ Thumbs.db
 # Python generated output
 *.pyo
 
-ml/outputs/*.csv
-ml/outputs/*.json
-ml/outputs/model_artifacts/*.joblib
+ml/outputs/
