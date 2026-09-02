@@ -10,20 +10,11 @@ from .data_processor import (
     get_columns,
     get_missing_values,
     get_duplicate_count,
+    get_all_works,
     get_work_by_id,
 )
 
-from .models import (
-    HealthResponse,
-    DatasetStatsResponse,
-    WorksResponse,
-    WorkRecord,
-    AnomaliesResponse,
-    AnomalyRecord,
-    AnomalyCountResponse,
-    HighRiskAnomaliesResponse,
-    AnomalySummaryResponse,
-)
+from .ml_service import run_ml_pipeline
 
 
 # ==========================================================
@@ -40,13 +31,15 @@ router = APIRouter()
 # routes.py is located at:
 # SIH26102/backend/app/routes.py
 #
-# parents[2] gives:
+# parents[2]:
 # SIH26102/
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# ML pipeline outputs are located at:
-# SIH26102/ml/outputs/
+
+# ==========================================================
+# ML OUTPUT PATHS
+# ==========================================================
 
 ML_OUTPUT_DIR = PROJECT_ROOT / "ml" / "outputs"
 
@@ -70,7 +63,10 @@ ANOMALY_SUMMARY_FILE = (
 def dataframe_to_records(df: pd.DataFrame):
     """
     Convert a DataFrame into JSON-safe records.
-    Handles NaN values correctly.
+
+    Handles:
+    - NaN values
+    - datetime values
     """
 
     return json.loads(
@@ -140,15 +136,15 @@ def load_anomaly_summary():
 # HEALTH CHECK
 # ==========================================================
 
-@router.get(
-    "/health",
-    response_model=HealthResponse
-)
+@router.get("/health")
 def health_check():
 
     return {
         "status": "ok",
-        "message": "MPLADS Anomaly Detection API is running"
+        "message": (
+            "MPLADS Anomaly Detection API "
+            "is running"
+        ),
     }
 
 
@@ -156,10 +152,7 @@ def health_check():
 # DATASET STATISTICS
 # ==========================================================
 
-@router.get(
-    "/stats",
-    response_model=DatasetStatsResponse
-)
+@router.get("/stats")
 def get_dataset_stats():
 
     df = load_features()
@@ -173,13 +166,43 @@ def get_dataset_stats():
 
 
 # ==========================================================
+# RUN ML PIPELINE
+# ==========================================================
+
+@router.post("/pipeline/run")
+def run_anomaly_pipeline():
+    """
+    Trigger the complete MPLADS anomaly detection pipeline.
+
+    The pipeline performs:
+
+    1. Data loading and merging
+    2. Feature engineering
+    3. Statistical anomaly detection
+    4. Rule-based anomaly detection
+    5. Isolation Forest detection
+    6. Ensemble scoring
+    7. Explanation generation
+    8. Output generation
+    """
+
+    result = run_ml_pipeline()
+
+    if not result["success"]:
+
+        raise HTTPException(
+            status_code=500,
+            detail=result["message"],
+        )
+
+    return result
+
+
+# ==========================================================
 # ANOMALY SUMMARY
 # ==========================================================
 
-@router.get(
-    "/summary",
-    response_model=AnomalySummaryResponse
-)
+@router.get("/summary")
 def get_summary():
 
     try:
@@ -192,7 +215,7 @@ def get_summary():
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
 
 
@@ -200,37 +223,36 @@ def get_summary():
 # GET ALL WORKS
 # ==========================================================
 
-@router.get(
-    "/works",
-    response_model=WorksResponse
-)
+@router.get("/works")
 def get_works(
 
     limit: int = Query(
         default=100,
         ge=1,
-        le=1000
+        le=1000,
     ),
 
     offset: int = Query(
         default=0,
-        ge=0
+        ge=0,
     ),
+
 ):
 
     df = load_features()
 
     total = len(df)
 
-    # Standard pagination slice
+    # Correct pagination
     paginated_df = df.iloc[
-        offset : offset + limit
+        offset: offset + limit
     ]
 
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
+
         "data": dataframe_to_records(
             paginated_df
         ),
@@ -242,42 +264,41 @@ def get_works(
 # ==========================================================
 
 # IMPORTANT:
+#
 # work_id values contain "/" characters.
 #
 # Example:
+#
 # WS/MP005/2024-2025/145074
 #
-# Therefore we use {work_id:path} so FastAPI
+# Therefore {work_id:path} is required so FastAPI
 # accepts the complete ID.
 
-@router.get(
-    "/works/{work_id:path}",
-    response_model=WorkRecord
-)
+@router.get("/works/{work_id:path}")
 def get_work(work_id: str):
 
     df = load_features()
 
     work = get_work_by_id(
         df,
-        work_id
+        work_id,
     )
 
     if work is None:
 
         raise HTTPException(
             status_code=404,
+
             detail=(
                 f"Work with ID "
                 f"'{work_id}' was not found"
-            )
+            ),
         )
 
-    # Convert safely to JSON
     return json.loads(
         pd.DataFrame([work]).to_json(
             orient="records",
-            date_format="iso"
+            date_format="iso",
         )
     )[0]
 
@@ -286,22 +307,20 @@ def get_work(work_id: str):
 # GET ALL FLAGGED ANOMALIES
 # ==========================================================
 
-@router.get(
-    "/anomalies",
-    response_model=AnomaliesResponse
-)
+@router.get("/anomalies")
 def get_anomalies(
 
     limit: int = Query(
         default=100,
         ge=1,
-        le=1000
+        le=1000,
     ),
 
     offset: int = Query(
         default=0,
-        ge=0
+        ge=0,
     ),
+
 ):
 
     try:
@@ -310,15 +329,16 @@ def get_anomalies(
 
         total = len(anomalies)
 
-        # Standard pagination slice
+        # Correct pagination
         paginated_anomalies = anomalies.iloc[
-            offset : offset + limit
+            offset: offset + limit
         ]
 
         return {
             "total_anomalies": total,
             "limit": limit,
             "offset": offset,
+
             "data": dataframe_to_records(
                 paginated_anomalies
             ),
@@ -328,7 +348,7 @@ def get_anomalies(
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
 
 
@@ -336,10 +356,7 @@ def get_anomalies(
 # GET ANOMALY COUNT
 # ==========================================================
 
-@router.get(
-    "/anomalies/count",
-    response_model=AnomalyCountResponse
-)
+@router.get("/anomalies/count")
 def get_anomaly_count():
 
     try:
@@ -354,7 +371,7 @@ def get_anomaly_count():
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
 
 
@@ -362,17 +379,15 @@ def get_anomaly_count():
 # GET HIGH-RISK ANOMALIES
 # ==========================================================
 
-@router.get(
-    "/anomalies/high-risk",
-    response_model=HighRiskAnomaliesResponse
-)
+@router.get("/anomalies/high-risk")
 def get_high_risk_anomalies(
 
     top_n: int = Query(
         default=10,
         ge=1,
-        le=100
+        le=100,
     ),
+
 ):
 
     try:
@@ -383,19 +398,21 @@ def get_high_risk_anomalies(
 
             raise HTTPException(
                 status_code=500,
+
                 detail=(
                     "anomaly_score column "
                     "not found in anomaly output"
-                )
+                ),
             )
 
         high_risk = anomalies.sort_values(
             by="anomaly_score",
-            ascending=False
+            ascending=False,
         ).head(top_n)
 
         return {
             "count": len(high_risk),
+
             "data": dataframe_to_records(
                 high_risk
             ),
@@ -405,7 +422,7 @@ def get_high_risk_anomalies(
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
 
 
@@ -413,10 +430,7 @@ def get_high_risk_anomalies(
 # GET SINGLE ANOMALY
 # ==========================================================
 
-@router.get(
-    "/anomalies/{work_id:path}",
-    response_model=AnomalyRecord
-)
+@router.get("/anomalies/{work_id:path}")
 def get_anomaly_by_work_id(
     work_id: str
 ):
@@ -433,10 +447,11 @@ def get_anomaly_by_work_id(
 
             raise HTTPException(
                 status_code=404,
+
                 detail=(
                     f"No flagged anomaly found "
                     f"for work ID '{work_id}'"
-                )
+                ),
             )
 
         return dataframe_to_records(
@@ -447,5 +462,5 @@ def get_anomaly_by_work_id(
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
