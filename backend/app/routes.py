@@ -1,7 +1,20 @@
+"""
+API Routes Module.
+
+Provides API endpoints for:
+- Dataset statistics
+- Works data
+- Core anomaly detection
+- Cost estimation innovation
+- Duplicate project detection innovation
+- Delay prediction innovation
+"""
+
 from pathlib import Path
 import json
 
 import pandas as pd
+
 from fastapi import APIRouter, HTTPException, Query
 
 from .data_processor import (
@@ -11,6 +24,16 @@ from .data_processor import (
     get_missing_values,
     get_duplicate_count,
     get_work_by_id,
+)
+
+from .ml_service import (
+    run_ml_pipeline,
+    get_cost_estimates as get_cost_estimates_service,
+    get_delay_predictions as get_delay_predictions_service,
+    get_delay_prediction_summary,
+    get_duplicate_projects,
+    get_duplicate_detection_full,
+    get_duplicate_summary,
 )
 
 
@@ -25,26 +48,13 @@ router = APIRouter()
 # PROJECT PATHS
 # ==========================================================
 
-# routes.py location:
-#
-# SIH26102/backend/app/routes.py
-#
-# parents[0] -> app
-# parents[1] -> backend
-# parents[2] -> SIH26102
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-
-# ==========================================================
-# ML OUTPUT DIRECTORY
-# ==========================================================
 
 ML_OUTPUT_DIR = PROJECT_ROOT / "ml" / "outputs"
 
 
 # ==========================================================
-# ANOMALY DETECTION OUTPUTS
+# CORE ANOMALY OUTPUT FILES
 # ==========================================================
 
 ANOMALY_SCORES_FILE = (
@@ -61,52 +71,28 @@ ANOMALY_SUMMARY_FILE = (
 
 
 # ==========================================================
-# INNOVATION OUTPUTS
-# ==========================================================
-
-# Innovation 1: Expected Cost Range
-COST_PREDICTIONS_FILE = (
-    ML_OUTPUT_DIR / "cost_predictions.csv"
-)
-
-
-# Innovation 2: Duplicate Project Detection
-DUPLICATE_CANDIDATES_FILE = (
-    ML_OUTPUT_DIR / "duplicate_candidates.csv"
-)
-
-
-# Innovation 3: Delay Prediction
-DELAY_PREDICTIONS_FILE = (
-    ML_OUTPUT_DIR / "delay_predictions.csv"
-)
-
-
-# ==========================================================
 # HELPER FUNCTIONS
 # ==========================================================
 
 def dataframe_to_records(df: pd.DataFrame):
     """
-    Convert a Pandas DataFrame into JSON-safe records.
-
-    Handles:
-    - NaN values
-    - NumPy numeric types
-    - Dates
+    Convert a DataFrame into JSON-safe Python records.
     """
 
     return json.loads(
         df.to_json(
             orient="records",
-            date_format="iso"
+            date_format="iso",
         )
     )
 
 
-def load_csv_file(file_path: Path, name: str):
+def load_csv_file(
+    file_path: Path,
+    name: str,
+):
     """
-    Generic CSV loader with consistent error handling.
+    Generic CSV loader.
     """
 
     if not file_path.exists():
@@ -119,14 +105,14 @@ def load_csv_file(file_path: Path, name: str):
 
 
 # ==========================================================
-# ML OUTPUT LOADERS
+# CORE ML OUTPUT LOADERS
 # ==========================================================
 
 def load_anomaly_scores():
 
     return load_csv_file(
         ANOMALY_SCORES_FILE,
-        "Anomaly scores"
+        "Anomaly scores",
     )
 
 
@@ -134,31 +120,7 @@ def load_flagged_anomalies():
 
     return load_csv_file(
         ANOMALY_FLAGGED_FILE,
-        "Flagged anomalies"
-    )
-
-
-def load_cost_predictions():
-
-    return load_csv_file(
-        COST_PREDICTIONS_FILE,
-        "Cost predictions"
-    )
-
-
-def load_duplicate_candidates():
-
-    return load_csv_file(
-        DUPLICATE_CANDIDATES_FILE,
-        "Duplicate candidates"
-    )
-
-
-def load_delay_predictions():
-
-    return load_csv_file(
-        DELAY_PREDICTIONS_FILE,
-        "Delay predictions"
+        "Flagged anomalies",
     )
 
 
@@ -174,7 +136,7 @@ def load_anomaly_summary():
     with open(
         ANOMALY_SUMMARY_FILE,
         "r",
-        encoding="utf-8"
+        encoding="utf-8",
     ) as file:
 
         return json.load(file)
@@ -189,7 +151,9 @@ def health_check():
 
     return {
         "status": "ok",
-        "message": "MPLADS Anomaly Detection API is running"
+        "message": (
+            "MPLADS Anomaly Detection API is running"
+        ),
     }
 
 
@@ -220,14 +184,13 @@ def get_works(
     limit: int = Query(
         default=100,
         ge=1,
-        le=1000
+        le=1000,
     ),
 
     offset: int = Query(
         default=0,
-        ge=0
+        ge=0,
     ),
-
 ):
 
     df = load_features()
@@ -252,26 +215,16 @@ def get_works(
 # GET SINGLE WORK
 # ==========================================================
 
-# work_id values contain "/" characters.
-#
-# Example:
-#
-# WS/MP005/2024-2025/145074
-#
-# Therefore:
-#
-# {work_id:path}
-#
-# is required.
-
 @router.get("/works/{work_id:path}")
-def get_work(work_id: str):
+def get_work(
+    work_id: str,
+):
 
     df = load_features()
 
     work = get_work_by_id(
         df,
-        work_id
+        work_id,
     )
 
     if work is None:
@@ -281,15 +234,31 @@ def get_work(work_id: str):
             detail=(
                 f"Work with ID "
                 f"'{work_id}' was not found"
-            )
+            ),
         )
 
-    return json.loads(
-        pd.DataFrame([work]).to_json(
-            orient="records",
-            date_format="iso"
-        )
+    return dataframe_to_records(
+        pd.DataFrame([work])
     )[0]
+
+
+# ==========================================================
+# RUN CORE ML PIPELINE
+# ==========================================================
+
+@router.post("/ml/run")
+def run_pipeline():
+
+    result = run_ml_pipeline()
+
+    if not result["success"]:
+
+        raise HTTPException(
+            status_code=500,
+            detail=result["message"],
+        )
+
+    return result
 
 
 # ==========================================================
@@ -307,7 +276,7 @@ def get_summary():
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
 
 
@@ -321,14 +290,13 @@ def get_anomalies(
     limit: int = Query(
         default=100,
         ge=1,
-        le=1000
+        le=1000,
     ),
 
     offset: int = Query(
         default=0,
-        ge=0
+        ge=0,
     ),
-
 ):
 
     try:
@@ -354,7 +322,7 @@ def get_anomalies(
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
 
 
@@ -377,7 +345,7 @@ def get_anomaly_count():
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
 
 
@@ -391,9 +359,8 @@ def get_high_risk_anomalies(
     top_n: int = Query(
         default=10,
         ge=1,
-        le=100
+        le=100,
     ),
-
 ):
 
     try:
@@ -407,12 +374,12 @@ def get_high_risk_anomalies(
                 detail=(
                     "anomaly_score column "
                     "not found in anomaly output"
-                )
+                ),
             )
 
         high_risk = anomalies.sort_values(
             by="anomaly_score",
-            ascending=False
+            ascending=False,
         ).head(top_n)
 
         return {
@@ -426,7 +393,7 @@ def get_high_risk_anomalies(
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
 
 
@@ -436,7 +403,7 @@ def get_high_risk_anomalies(
 
 @router.get("/anomalies/{work_id:path}")
 def get_anomaly_by_work_id(
-    work_id: str
+    work_id: str,
 ):
 
     try:
@@ -454,7 +421,7 @@ def get_anomaly_by_work_id(
                 detail=(
                     f"No flagged anomaly found "
                     f"for work ID '{work_id}'"
-                )
+                ),
             )
 
         return dataframe_to_records(
@@ -465,13 +432,13 @@ def get_anomaly_by_work_id(
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=str(error),
         )
 
 
 # ==========================================================
 # INNOVATION 1
-# EXPECTED COST RANGE
+# COST RANGE ESTIMATION
 # ==========================================================
 
 @router.get("/cost-estimates")
@@ -480,201 +447,238 @@ def get_cost_estimates(
     limit: int = Query(
         default=100,
         ge=1,
-        le=1000
+        le=1000,
     ),
 
     offset: int = Query(
         default=0,
-        ge=0
+        ge=0,
     ),
-
 ):
 
-    try:
+    result = get_cost_estimates_service()
 
-        predictions = load_cost_predictions()
-
-        total = len(predictions)
-
-        paginated_predictions = predictions.iloc[
-            offset:offset + limit
-        ]
-
-        return {
-            "total_predictions": total,
-            "limit": limit,
-            "offset": offset,
-            "data": dataframe_to_records(
-                paginated_predictions
-            ),
-        }
-
-    except FileNotFoundError as error:
+    if not result["success"]:
 
         raise HTTPException(
-            status_code=404,
-            detail=str(error)
+            status_code=500,
+            detail=result["message"],
         )
+
+    estimates = result["cost_estimates"]
+
+    total = len(estimates)
+
+    paginated_estimates = estimates[
+        offset:offset + limit
+    ]
+
+    return {
+        "total_estimates": total,
+        "limit": limit,
+        "offset": offset,
+        "data": paginated_estimates,
+    }
 
 
 # ==========================================================
-# GET COST ESTIMATE FOR A SINGLE WORK
+# GET COST ESTIMATE FOR SINGLE WORK
 # ==========================================================
 
 @router.get("/cost-estimates/{work_id:path}")
 def get_cost_estimate_by_work_id(
-    work_id: str
+    work_id: str,
 ):
 
-    try:
+    result = get_cost_estimates_service()
 
-        predictions = load_cost_predictions()
+    if not result["success"]:
 
-        if "work_id" not in predictions.columns:
+        raise HTTPException(
+            status_code=500,
+            detail=result["message"],
+        )
 
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "work_id column not found "
-                    "in cost prediction output"
-                )
-            )
+    estimates = pd.DataFrame(
+        result["cost_estimates"]
+    )
 
-        result = predictions[
-            predictions["work_id"] == work_id
-        ]
+    if "work_id" not in estimates.columns:
 
-        if result.empty:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "work_id column not found "
+                "in cost estimation output"
+            ),
+        )
 
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    f"No cost estimate found "
-                    f"for work ID '{work_id}'"
-                )
-            )
+    estimate = estimates[
+        estimates["work_id"] == work_id
+    ]
 
-        return dataframe_to_records(
-            result
-        )[0]
-
-    except FileNotFoundError as error:
+    if estimate.empty:
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=(
+                f"No cost estimate found "
+                f"for work ID '{work_id}'"
+            ),
         )
+
+    return dataframe_to_records(
+        estimate
+    )[0]
 
 
 # ==========================================================
 # INNOVATION 2
-# DUPLICATE PROJECT DETECTION
+# DUPLICATE DETECTION
 # ==========================================================
 
 @router.get("/duplicates")
-def get_duplicate_candidates(
+def get_duplicates(
 
     limit: int = Query(
         default=100,
         ge=1,
-        le=1000
+        le=1000,
     ),
 
     offset: int = Query(
         default=0,
-        ge=0
+        ge=0,
     ),
-
 ):
 
-    try:
+    result = get_duplicate_projects()
 
-        duplicates = load_duplicate_candidates()
-
-        total = len(duplicates)
-
-        paginated_duplicates = duplicates.iloc[
-            offset:offset + limit
-        ]
-
-        return {
-            "total_candidates": total,
-            "limit": limit,
-            "offset": offset,
-            "data": dataframe_to_records(
-                paginated_duplicates
-            ),
-        }
-
-    except FileNotFoundError as error:
+    if not result["success"]:
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=result["message"],
         )
+
+    duplicates = result["duplicates"]
+
+    total = len(duplicates)
+
+    paginated_duplicates = duplicates[
+        offset:offset + limit
+    ]
+
+    return {
+        "total_candidates": total,
+        "limit": limit,
+        "offset": offset,
+        "data": paginated_duplicates,
+    }
 
 
 # ==========================================================
-# GET DUPLICATES FOR A SINGLE WORK
+# FULL DUPLICATE RESULTS
+# ==========================================================
+
+@router.get("/duplicates/full")
+def get_full_duplicate_results():
+
+    result = get_duplicate_detection_full()
+
+    if not result["success"]:
+
+        raise HTTPException(
+            status_code=404,
+            detail=result["message"],
+        )
+
+    return result
+
+
+# ==========================================================
+# DUPLICATE SUMMARY
+# ==========================================================
+
+@router.get("/duplicates/summary")
+def get_duplicates_summary():
+
+    result = get_duplicate_summary()
+
+    if not result["success"]:
+
+        raise HTTPException(
+            status_code=404,
+            detail=result["message"],
+        )
+
+    return result
+
+
+# ==========================================================
+# GET DUPLICATES FOR SINGLE WORK
+# IMPORTANT: MUST COME AFTER STATIC ROUTES
 # ==========================================================
 
 @router.get("/duplicates/{work_id:path}")
 def get_duplicates_by_work_id(
-    work_id: str
+    work_id: str,
 ):
 
-    try:
+    result = get_duplicate_projects()
 
-        duplicates = load_duplicate_candidates()
-
-        required_columns = {
-            "work_id_1",
-            "work_id_2"
-        }
-
-        if not required_columns.issubset(
-            duplicates.columns
-        ):
-
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "Duplicate detection output "
-                    "does not contain the required "
-                    "work ID columns"
-                )
-            )
-
-        result = duplicates[
-            (duplicates["work_id_1"] == work_id)
-            |
-            (duplicates["work_id_2"] == work_id)
-        ]
-
-        if result.empty:
-
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    f"No duplicate candidates found "
-                    f"for work ID '{work_id}'"
-                )
-            )
-
-        return {
-            "work_id": work_id,
-            "count": len(result),
-            "data": dataframe_to_records(
-                result
-            ),
-        }
-
-    except FileNotFoundError as error:
+    if not result["success"]:
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=result["message"],
         )
+
+    duplicates = pd.DataFrame(
+        result["duplicates"]
+    )
+
+    required_columns = {
+        "work_id_1",
+        "work_id_2",
+    }
+
+    if not required_columns.issubset(
+        duplicates.columns
+    ):
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Duplicate detection output "
+                "does not contain the required "
+                "work ID columns"
+            ),
+        )
+
+    matching_duplicates = duplicates[
+        (duplicates["work_id_1"] == work_id)
+        |
+        (duplicates["work_id_2"] == work_id)
+    ]
+
+    if matching_duplicates.empty:
+
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No duplicate candidates found "
+                f"for work ID '{work_id}'"
+            ),
+        )
+
+    return {
+        "work_id": work_id,
+        "count": len(matching_duplicates),
+        "data": dataframe_to_records(
+            matching_duplicates
+        ),
+    }
 
 
 # ==========================================================
@@ -688,87 +692,106 @@ def get_delay_predictions(
     limit: int = Query(
         default=100,
         ge=1,
-        le=1000
+        le=1000,
     ),
 
     offset: int = Query(
         default=0,
-        ge=0
+        ge=0,
     ),
-
 ):
 
-    try:
+    result = get_delay_predictions_service()
 
-        predictions = load_delay_predictions()
-
-        total = len(predictions)
-
-        paginated_predictions = predictions.iloc[
-            offset:offset + limit
-        ]
-
-        return {
-            "total_predictions": total,
-            "limit": limit,
-            "offset": offset,
-            "data": dataframe_to_records(
-                paginated_predictions
-            ),
-        }
-
-    except FileNotFoundError as error:
+    if not result["success"]:
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=result["message"],
         )
+
+    predictions = result["predictions"]
+
+    total = len(predictions)
+
+    paginated_predictions = predictions[
+        offset:offset + limit
+    ]
+
+    return {
+        "total_predictions": total,
+        "limit": limit,
+        "offset": offset,
+        "data": paginated_predictions,
+    }
 
 
 # ==========================================================
-# GET DELAY PREDICTION FOR A SINGLE WORK
+# DELAY PREDICTION SUMMARY
+# ==========================================================
+
+@router.get("/delay-predictions/summary")
+def get_delay_summary():
+
+    result = get_delay_prediction_summary()
+
+    if not result["success"]:
+
+        raise HTTPException(
+            status_code=404,
+            detail=result["message"],
+        )
+
+    return result
+
+
+# ==========================================================
+# GET DELAY PREDICTION FOR SINGLE WORK
+# IMPORTANT: MUST COME LAST
 # ==========================================================
 
 @router.get("/delay-predictions/{work_id:path}")
 def get_delay_prediction_by_work_id(
-    work_id: str
+    work_id: str,
 ):
 
-    try:
+    result = get_delay_predictions_service()
 
-        predictions = load_delay_predictions()
-
-        if "work_id" not in predictions.columns:
-
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "work_id column not found "
-                    "in delay prediction output"
-                )
-            )
-
-        result = predictions[
-            predictions["work_id"] == work_id
-        ]
-
-        if result.empty:
-
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    f"No delay prediction found "
-                    f"for work ID '{work_id}'"
-                )
-            )
-
-        return dataframe_to_records(
-            result
-        )[0]
-
-    except FileNotFoundError as error:
+    if not result["success"]:
 
         raise HTTPException(
             status_code=404,
-            detail=str(error)
+            detail=result["message"],
         )
+
+    predictions = pd.DataFrame(
+        result["predictions"]
+    )
+
+    if "work_id" not in predictions.columns:
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "work_id column not found "
+                "in delay prediction output"
+            ),
+        )
+
+    prediction = predictions[
+        predictions["work_id"] == work_id
+    ]
+
+    if prediction.empty:
+
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No delay prediction found "
+                f"for work ID '{work_id}'"
+            ),
+        )
+
+    return dataframe_to_records(
+        prediction
+    )[0]

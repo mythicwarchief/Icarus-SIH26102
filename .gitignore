@@ -22,3 +22,5 @@ Thumbs.db
 *.pyo
 
 ml/outputs/
+# Generated ML innovation outputs
+ml/innovations/outputs/
