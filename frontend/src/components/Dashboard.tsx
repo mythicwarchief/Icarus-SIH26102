@@ -6,10 +6,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from 'next-themes'
 import { ArrowLeft, ArrowRight, ArrowUpRight, Bell, ChevronRight, CircleHelp, FolderKanban, LayoutDashboard, ListFilter, LogOut, Menu, Moon, RotateCcw, Search, Settings, ShieldCheck, Sun, TrendingUp, X } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from 'recharts'
-import { anomalyBreakdown, formatINR, getProject, getSummary, monthlyTrend, projects, regionalRisk, riskDistribution, statusLabels, type Project, type ProjectStatus, type RiskTier } from '@/lib/types'
-import { useAsyncData, delayedMock } from '@/hooks/useAsyncData'
-import { MetricCardsSkeleton, RegistryRowSkeleton, RiskGaugeSkeleton, ErrorPanel } from '@/components/LoadingStates'
+import { formatINR, monthlyTrend, regionalRisk, statusLabels, type Project, type ProjectStatus, type RiskTier } from '@/lib/types'
+import { useAsyncData } from '@/hooks/useAsyncData'
+import { MetricCardsSkeleton, RegistryRowSkeleton, RiskGaugeSkeleton, ErrorPanel, Skeleton } from '@/components/LoadingStates'
 import { CostEstimatePanel, DelayRiskPanel, DuplicateIntelligencePanel } from '@/components/intelligence/InnovationPanels'
+import { getAnomalySummary } from '@/services/summaryApi'
+import { getAllScoredWorksComplete, getScoredWork, getHighRiskAnomalies } from '@/services/api'
+import { adaptAnomalyRecordToProject } from '@/services/realAdapter'
 
 const rise = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } }
 
@@ -231,10 +234,15 @@ function Nav({ href, icon, label, onClick }: { href: string; icon: React.ReactNo
 }
 export function PageHeading({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: React.ReactNode }) { return <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[.18em] text-primary">{eyebrow}</p><h1 className="font-serif text-3xl font-bold tracking-tight md:text-4xl">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p></div>{action}</div> }
 export function MetricCards() {
-  const { data: s, loading, error, retry } = useAsyncData(() => delayedMock(getSummary(), 200), [])
+  const { data: s, loading, error, retry } = useAsyncData(() => getAnomalySummary(), [])
   if (loading) return <MetricCardsSkeleton />
   if (error || !s) return <ErrorPanel message={error ?? 'No summary data available.'} onRetry={retry} />
-  const cards = [['Projects monitored', s.totalProjects, 'Across 18 regions', 'FolderKanban'], ['Sanctioned value', s.totalSanctionedValue, 'Active portfolio', 'TrendingUp'], ['Flagged for review', s.flaggedCount, 'Requires verification', 'Bell'], ['High priority', s.highPriorityCount, 'Priority investigation queue', 'ShieldCheck']] as const
+  const cards = [
+    ['Projects monitored', s.total_works_analyzed, 'Across all regions', 'FolderKanban'],
+    ['Flagged for review', s.total_anomalies, `${s.anomaly_rate_percent.toFixed(1)}% of portfolio`, 'Bell'],
+    ['High priority', s.severity_distribution.critical + s.severity_distribution.high, 'Requires immediate attention', 'ShieldCheck'],
+    ['Ongoing works', s.status_distribution.Ongoing, 'Currently in progress', 'TrendingUp'],
+  ] as const
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {cards.map(([label, value, note, icon], i) => (
@@ -244,7 +252,7 @@ export function MetricCards() {
               <p className="text-sm text-muted-foreground">{label}</p>
               <span className="text-primary">{icon === 'TrendingUp' ? <TrendingUp size={18} /> : icon === 'Bell' ? <Bell size={18} /> : icon === 'ShieldCheck' ? <ShieldCheck size={18} /> : <FolderKanban size={18} />}</span>
             </div>
-            <p className="mt-4 text-3xl font-semibold tracking-tight">{label === 'Sanctioned value' ? formatINR(value) : <CountUp value={value} />}</p>
+            <p className="mt-4 text-3xl font-semibold tracking-tight"><CountUp value={value} /></p>
             <p className="mt-1 text-xs text-muted-foreground">{note}</p>
           </div>
         </Reveal>
@@ -252,15 +260,99 @@ export function MetricCards() {
     </div>
   )
 }
-export function RiskChart() { return <Reveal><Panel title="Risk distribution" note="Current portfolio"><div className="flex h-64 items-center gap-5"><ResponsiveContainer width="58%" height="100%"><PieChart><Pie data={riskDistribution} dataKey="value" innerRadius={65} outerRadius={90} paddingAngle={3} animationDuration={800} animationEasing="ease-out">{riskDistribution.map(x => <Cell key={x.name} fill={x.fill} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer><div className="space-y-4">{riskDistribution.map(x => <div key={x.name} className="flex items-center gap-2 text-sm"><span className="size-2.5 rounded-full" style={{ background: x.fill }} /><span className="text-muted-foreground">{x.name}</span><b className="ml-auto"><CountUp value={x.value} /></b></div>)}</div></div></Panel></Reveal> }
-export function AnomalyChart() { return <Reveal index={1}><Panel title="Anomaly types" note="Flagged signals"><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={anomalyBreakdown} layout="vertical" margin={{ left: 10, right: 10 }}><CartesianGrid horizontal={false} strokeDasharray="3 3" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={105} tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="value" fill="#2f8f83" radius={[0, 5, 5, 0]} animationDuration={800} animationEasing="ease-out" /></BarChart></ResponsiveContainer></div></Panel></Reveal> }
+export function RiskChart() {
+  const { data: s, loading, error, retry } = useAsyncData(() => getAnomalySummary(), [])
+  if (loading) return <Panel title="Risk distribution" note="Current portfolio"><Skeleton className="h-64 w-full" /></Panel>
+  if (error || !s) return <Panel title="Risk distribution" note="Current portfolio"><ErrorPanel message={error ?? 'No data available.'} onRetry={retry} /></Panel>
+  const dist = [
+    { name: 'No anomalies', value: s.total_works_analyzed - s.total_anomalies, fill: '#2f8f83' },
+    { name: 'Medium severity', value: s.severity_distribution.medium, fill: '#d89b3d' },
+    { name: 'High severity', value: s.severity_distribution.high + s.severity_distribution.critical, fill: '#c95c4b' },
+  ]
+  return (
+    <Reveal>
+      <Panel title="Risk distribution" note="Current portfolio">
+        <div className="flex h-64 items-center gap-5">
+          <ResponsiveContainer width="58%" height="100%">
+            <PieChart>
+              <Pie data={dist} dataKey="value" innerRadius={65} outerRadius={90} paddingAngle={3} animationDuration={800} animationEasing="ease-out">
+                {dist.map(x => <Cell key={x.name} fill={x.fill} />)}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="space-y-4">
+            {dist.map(x => (
+              <div key={x.name} className="flex items-center gap-2 text-sm">
+                <span className="size-2.5 rounded-full" style={{ background: x.fill }} />
+                <span className="text-muted-foreground">{x.name}</span>
+                <b className="ml-auto"><CountUp value={x.value} /></b>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Panel>
+    </Reveal>
+  )
+}
+export function AnomalyChart() {
+  const { data: s, loading, error, retry } = useAsyncData(() => getAnomalySummary(), [])
+  if (loading) return <Panel title="Anomaly types" note="Flagged signals"><Skeleton className="h-64 w-full" /></Panel>
+  if (error || !s) return <Panel title="Anomaly types" note="Flagged signals"><ErrorPanel message={error ?? 'No data available.'} onRetry={retry} /></Panel>
+  const categoryLabels: Record<string, string> = { financial: 'Financial', temporal: 'Temporal', vendor: 'Vendor', compliance: 'Compliance', statistical: 'Statistical' }
+  const data = Object.entries(s.category_distribution)
+    .map(([key, value]) => ({ name: categoryLabels[key] ?? key, value }))
+    .filter(d => d.value > 0)
+    .sort((a, b) => b.value - a.value)
+  return (
+    <Reveal index={1}>
+      <Panel title="Anomaly types" note="Flagged signals">
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} layout="vertical" margin={{ left: 10, right: 10 }}>
+              <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="name" width={105} tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Bar dataKey="value" fill="#2f8f83" radius={[0, 5, 5, 0]} animationDuration={800} animationEasing="ease-out" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Panel>
+    </Reveal>
+  )
+}
 export function TrendMini() { return <Reveal><Panel title="Flagging activity" note="Last 6 months"><div className="h-64"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthlyTrend}><CartesianGrid vertical={false} strokeDasharray="3 3" /><XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis hide /><Tooltip /><Line type="monotone" dataKey="flagged" stroke="#c95c4b" strokeWidth={3} dot={false} animationDuration={800} animationEasing="ease-out" /><Line type="monotone" dataKey="reviewed" stroke="#2f8f83" strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" /></LineChart></ResponsiveContainer></div></Panel></Reveal> }
 export function Panel({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) { return <section className="rounded-2xl border border-border bg-card p-5 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">{title}</h2>{note && <span className="text-xs text-muted-foreground">{note}</span>}</div>{children}</section> }
-export function Queue() { const queue = projects.filter(p => p.isFlagged).sort((a, b) => b.riskScore - a.riskScore).slice(0, 6); return <Panel title="Priority investigation queue" note={`${queue.length} surfaced`}><div className="divide-y divide-border">{queue.map(p => <Link href={`/projects/${p.id}`} key={p.id} className="flex items-center gap-4 py-3 first:pt-1 last:pb-1"><span className={`grid size-9 place-items-center rounded-xl text-sm font-bold ${p.riskTier === 'high' ? 'bg-risk-high/10 text-risk-high' : 'bg-risk-medium/10 text-risk-medium'}`}><CountUp value={p.riskScore} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{p.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{p.location} · {p.anomalies?.[0]?.explanation}</p></div><ChevronRight size={17} className="text-muted-foreground" /></Link>)}</div></Panel> }
+export function Queue() {
+  const { data, loading, error, retry } = useAsyncData(() => getHighRiskAnomalies(6), [])
+  if (loading) return <Panel title="Priority investigation queue" note="Loading…"><RegistryRowSkeleton /></Panel>
+  if (error || !data) return <Panel title="Priority investigation queue" note="—"><ErrorPanel message={error ?? 'No data available.'} onRetry={retry} /></Panel>
+  const queue = data.data.map(adaptAnomalyRecordToProject)
+  return (
+    <Panel title="Priority investigation queue" note={`${queue.length} surfaced`}>
+      <div className="divide-y divide-border">
+        {queue.map(p => (
+          <Link href={`/projects/${p.id}`} key={p.id} className="flex items-center gap-4 py-3 first:pt-1 last:pb-1">
+            <span className={`grid size-9 place-items-center rounded-xl text-sm font-bold ${p.riskTier === 'high' ? 'bg-risk-high/10 text-risk-high' : 'bg-risk-medium/10 text-risk-medium'}`}>
+              <CountUp value={p.riskScore} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{p.name}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{p.location} · {p.anomalies?.[0]?.explanation}</p>
+            </div>
+            <ChevronRight size={17} className="text-muted-foreground" />
+          </Link>
+        ))}
+      </div>
+    </Panel>
+  )
+}
 export function Dashboard() { return <Shell><PageHeading eyebrow="MPLADS oversight / 01" title="Good morning !!!" description="A clear view of project health, unusual patterns, and the works that need your attention." action={<Link href="/projects" className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">Review projects <ArrowUpRight size={16} /></Link>} /><MetricCards /><div className="mt-5 grid gap-5 lg:grid-cols-2"><RiskChart /><AnomalyChart /></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.25fr_.75fr]"><Queue /><TrendMini /></div><p className="mt-8 text-center text-xs text-muted-foreground">Signals are system-generated indicators. Every flag requires human verification before action.</p></Shell> }
 export function ProjectRow({ p }: { p: Project }) { return <Link href={`/projects/${p.id}`} className="grid grid-cols-[1fr_110px_100px_95px_30px] items-center gap-3 border-b border-border px-4 py-4 hover:bg-accent/50"><div><p className="text-sm font-medium">{p.name}</p><p className="text-xs text-muted-foreground">{p.id} · {p.location}, {p.region}</p></div><span className="text-sm">{formatINR(p.sanctionedAmount)}</span><span className="text-sm">{statusLabels[p.status]}</span><span className={`text-sm font-semibold ${p.riskTier === 'high' ? 'text-risk-high' : p.riskTier === 'medium' ? 'text-risk-medium' : 'text-risk-low'}`}>{p.riskScore} / 100</span><ChevronRight size={16} className="text-muted-foreground" /></Link> }
 export function Registry() {
-  const { data: allProjects, loading, error, retry } = useAsyncData(() => delayedMock(projects, 200), [])
+  const { data: rawWorks, loading, error, retry } = useAsyncData(() => getAllScoredWorksComplete(), [])
+  const allProjects = useMemo(() => rawWorks?.map(adaptAnomalyRecordToProject), [rawWorks])
   const [query, setQuery] = useState('')
   const [risk, setRisk] = useState<'all' | RiskTier>('all')
   const [status, setStatus] = useState<'all' | ProjectStatus>('all')
@@ -343,7 +435,8 @@ export function DuplicateMatchPanel({ project }: { project: Project }) { const m
 export function Investigation({ project }: { project: Project }) { return <Shell><Link href="/projects" className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft size={15} /> Back to registry</Link><PageHeading eyebrow="Project investigation / 03" title={project.name} description={`${project.id} · ${project.location}, ${project.region}`} action={<span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${project.isFlagged ? 'bg-risk-medium/10 text-risk-medium' : 'bg-risk-low/10 text-risk-low'}`}>{project.isFlagged ? 'Flagged for review' : 'No active flags'}</span>} /><div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]"><Panel title="Risk score" note="Explainable indicator"><div className="flex items-center gap-6"><div className={`grid size-32 place-items-center rounded-full border-[12px] ${project.riskTier === 'high' ? 'border-risk-high/30 text-risk-high' : project.riskTier === 'medium' ? 'border-risk-medium/30 text-risk-medium' : 'border-risk-low/30 text-risk-low'}`}><span className="text-3xl font-bold"><CountUp value={project.riskScore} /></span></div><div><p className="font-semibold capitalize">{project.riskTier} priority</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{project.isFlagged ? 'This project shows unusual behavior compared with similar works and requires human verification.' : 'No unusual behavior is currently surfaced by the screening rules.'}</p></div></div></Panel><Panel title="Key financials"><div className="grid grid-cols-2 gap-5">{[['Sanctioned', formatINR(project.sanctionedAmount)], ['Released', formatINR(project.releasedAmount)], ['Utilized', formatINR(project.utilizedAmount)], ['Planned duration', `${project.plannedDuration} days`]].map(([a, b]) => <div key={a}><p className="text-xs text-muted-foreground">{a}</p><p className="mt-1 text-lg font-semibold">{b}</p></div>)}</div></Panel></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><Panel title="Why this was flagged" note="Plain-English explanation">{project.anomalies?.length ? <div className="space-y-3">{project.anomalies.map((a, i) => <div key={`${a.type}-${i}`} className="rounded-xl bg-accent p-4"><div className="flex items-center justify-between"><p className="font-medium capitalize">{a.type.replaceAll('_', ' ')}</p><span className="text-xs text-muted-foreground">{Math.round(a.confidence * 100)}% confidence</span></div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{a.explanation}</p></div>)}</div> : <p className="text-sm text-muted-foreground">No active screening signals. Continue routine monitoring.</p>}</Panel><Panel title="Project timeline"><div className="space-y-4 text-sm"><div><p className="text-xs text-muted-foreground">Sanctioned</p><p className="mt-1">{project.sanctionedDate}</p></div><div><p className="text-xs text-muted-foreground">Work started</p><p className="mt-1">{project.workStartDate ?? 'Not started'}</p></div><div><p className="text-xs text-muted-foreground">Completed</p><p className="mt-1">{project.completedDate ?? 'In progress'}</p></div></div></Panel></div>{project.duplicateMatch && <div className="mt-5"><DuplicateMatchPanel project={project} /></div>}<p className="mt-8 text-center text-xs text-muted-foreground">This is an explainable screening signal, not a finding. Verify against source records before taking action.</p></Shell> }
 
 export function InvestigationWithLoading({ workId }: { workId: string }) {
-  const { data: project, loading, error, retry } = useAsyncData(() => delayedMock(getProject(workId), 200), [workId])
+  const { data: rawWork, loading, error, retry } = useAsyncData(() => getScoredWork(workId), [workId])
+  const project = rawWork ? adaptAnomalyRecordToProject(rawWork) : null
   if (loading) {
     return (
       <Shell>

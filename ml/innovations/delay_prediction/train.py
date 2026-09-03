@@ -18,10 +18,11 @@ from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score, tra
 from sklearn.metrics import mean_absolute_error, r2_score, roc_auc_score, f1_score, accuracy_score, classification_report
 
 from ml import config
-from ml.delay_prediction.features import build_feature_dataset, DELAY_THRESHOLD_DAYS
+from ml.innovations.delay_prediction.features import build_feature_dataset, DELAY_THRESHOLD_DAYS
 
 
-MODEL_DIR = config.MODEL_DIR
+from ml.innovations import config as innovations_config
+MODEL_DIR = innovations_config.MODEL_DIR
 MODEL_BUNDLE_PATH = os.path.join(MODEL_DIR, "delay_prediction_models.joblib")
 METRICS_PATH = os.path.join(MODEL_DIR, "delay_model_metrics.json")
 

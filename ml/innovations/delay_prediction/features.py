@@ -51,6 +51,22 @@ def build_feature_dataset(
     df = pd.read_csv(master_df_path)
     sanc_raw = pd.read_csv(sanctioned_raw_path)
 
+    # budget_tier is not produced by the core anomaly pipeline output;
+    # compute it here using the same boundaries as cost_range.py so downstream
+    # tier_map logic has a value to work with.
+    if "budget_tier" not in df.columns:
+        def _assign_budget_tier(amount):
+            if pd.isna(amount) or amount <= 0:
+                return "Unknown"
+            if amount < 500_000:
+                return "Small"
+            if amount < 2_500_000:
+                return "Medium"
+            if amount < 10_000_000:
+                return "Large"
+            return "Very Large"
+        df["budget_tier"] = df["sanction_amount"].apply(_assign_budget_tier)
+
     # 1. Merge IDA (Implementing District Authority) if not in anomaly_scores
     if "ida" not in df.columns:
         # Match by work_id or index

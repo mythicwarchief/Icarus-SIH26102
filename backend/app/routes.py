@@ -327,6 +327,72 @@ def get_anomalies(
 
 
 # ==========================================================
+# GET ALL WORKS WITH FULL SCORING (not just flagged)
+# Uses anomaly_scores.csv, which covers every scored work,
+# unlike /anomalies which only returns the flagged subset.
+# ==========================================================
+
+@router.get("/anomalies/all")
+def get_all_scored_works(
+
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=1000,
+    ),
+
+    offset: int = Query(
+        default=0,
+        ge=0,
+    ),
+
+    work_id: str | None = Query(
+        default=None,
+        description="Optional exact work_id filter, ignores pagination when provided.",
+    ),
+):
+
+    try:
+
+        scores = load_anomaly_scores()
+
+        if work_id is not None:
+
+            match = scores[scores["work_id"] == work_id]
+
+            if match.empty:
+
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No scored work found for work ID '{work_id}'",
+                )
+
+            return dataframe_to_records(match)[0]
+
+        total = len(scores)
+
+        paginated_scores = scores.iloc[
+            offset:offset + limit
+        ]
+
+        return {
+            "total_works": total,
+            "limit": limit,
+            "offset": offset,
+            "data": dataframe_to_records(
+                paginated_scores
+            ),
+        }
+
+    except FileNotFoundError as error:
+
+        raise HTTPException(
+            status_code=404,
+            detail=str(error),
+        )
+
+
+# ==========================================================
 # GET ANOMALY COUNT
 # ==========================================================
 

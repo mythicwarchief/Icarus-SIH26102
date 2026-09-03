@@ -19,13 +19,14 @@ import pandas as pd
 from datetime import timedelta
 
 from ml import config
-from ml.delay_prediction.features import build_feature_dataset, DELAY_THRESHOLD_DAYS
+from ml.innovations.delay_prediction.features import build_feature_dataset, DELAY_THRESHOLD_DAYS
 
 
-OUTPUT_DIR = config.OUTPUT_DIR
+from ml.innovations import config as innovations_config
+OUTPUT_DIR = innovations_config.OUTPUT_DIR
 DELAY_PREDICTIONS_CSV = os.path.join(OUTPUT_DIR, "delay_predictions.csv")
 DELAY_SUMMARY_JSON = os.path.join(OUTPUT_DIR, "delay_prediction_summary.json")
-MODEL_BUNDLE_PATH = os.path.join(OUTPUT_DIR, "model_artifacts", "delay_prediction_models.joblib")
+MODEL_BUNDLE_PATH = os.path.join(innovations_config.MODEL_DIR, "delay_prediction_models.joblib")
 
 
 def predict_all_works():
@@ -35,7 +36,7 @@ def predict_all_works():
     print("=" * 70)
 
     if not os.path.exists(MODEL_BUNDLE_PATH):
-        from ml.delay_prediction.train import train_delay_models
+        from ml.innovations.delay_prediction.train import train_delay_models
         bundle = train_delay_models()
     else:
         bundle = joblib.load(MODEL_BUNDLE_PATH)

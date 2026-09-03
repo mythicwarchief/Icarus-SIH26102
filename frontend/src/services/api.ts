@@ -21,24 +21,39 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 // Keep UI components dependent on this service rather than calling fetch directly.
 export const API_BASE = API_BASE_URL
 
-import type { RawAnomalyRecord } from './adapters'
+import type { RawAnomalyRecord } from './realAdapter'
 
-export async function getAnomalyScores(limit = 100, offset = 0) {
-  return apiFetch<{ total: number; limit: number; offset: number; data: RawAnomalyRecord[] }>(
-    `/api/anomalies?limit=${limit}&offset=${offset}`
+// Full portfolio (all scored works, not just flagged) - one page
+export async function getAllScoredWorks(limit = 100, offset = 0) {
+  return apiFetch<{ total_works: number; limit: number; offset: number; data: RawAnomalyRecord[] }>(
+    `/api/anomalies/all?limit=${limit}&offset=${offset}`
   )
 }
 
-export async function getAnomalySummary() {
-  return apiFetch<{
-    total_works_analyzed: number
-    total_anomalies: number
-    anomaly_rate_percent: number
-    severity_distribution: { critical: number; high: number; medium: number; low: number }
-    status_distribution: Record<string, number>
-  }>('/api/summary')
+// Fetches every scored work by looping pages (backend caps a single page at 1000).
+// Used by Registry, which needs the complete list for client-side search/filter.
+export async function getAllScoredWorksComplete(): Promise<RawAnomalyRecord[]> {
+  const pageSize = 1000
+  const first = await getAllScoredWorks(pageSize, 0)
+  const all = [...first.data]
+  let fetched = first.data.length
+  while (fetched < first.total_works) {
+    const next = await getAllScoredWorks(pageSize, fetched)
+    all.push(...next.data)
+    fetched += next.data.length
+    if (next.data.length === 0) break // safety guard against infinite loop
+  }
+  return all
 }
 
-export async function getWorkAnomaly(workId: string) {
-  return apiFetch<RawAnomalyRecord>(`/api/anomalies/${encodeURIComponent(workId)}`)
+// Single work lookup regardless of flagged status - powers Investigation
+export async function getScoredWork(workId: string) {
+  return apiFetch<RawAnomalyRecord>(`/api/anomalies/all?work_id=${encodeURIComponent(workId)}`)
+}
+
+// Top N highest-risk flagged works - powers the Dashboard priority queue
+export async function getHighRiskAnomalies(topN = 6) {
+  return apiFetch<{ count: number; data: RawAnomalyRecord[] }>(
+    `/api/anomalies/high-risk?top_n=${topN}`
+  )
 }
