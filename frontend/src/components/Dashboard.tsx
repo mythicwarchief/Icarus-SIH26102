@@ -29,6 +29,21 @@ export function CountUp({ value }: { value: number }) {
   return <span>{count}</span>
 }
 
+function getPageWindow(current: number, total: number): (number | '...')[] {
+  const delta = 2
+  const range: (number | '...')[] = []
+  const start = Math.max(2, current - delta)
+  const end = Math.min(total - 1, current + delta)
+
+  range.push(1)
+  if (start > 2) range.push('...')
+  for (let i = start; i <= end; i++) range.push(i)
+  if (end < total - 1) range.push('...')
+  if (total > 1) range.push(total)
+
+  return range
+}
+
 export function Reveal({ children, index = 0, className = '' }: { children: React.ReactNode; index?: number; className?: string }) {
   return (
     <motion.div
@@ -445,16 +460,20 @@ export function Registry() {
           <span>Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length} projects</span>
           <div className="flex items-center gap-1">
             <button aria-label="Previous page" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="grid size-8 place-items-center rounded-lg border border-border disabled:opacity-40"><ArrowLeft size={14} /></button>
-            {Array.from({ length: pages }, (_, i) => i + 1).map(n => (
-              <button key={n} aria-label={`Page ${n}`} onClick={() => setPage(n)} className={`grid size-8 place-items-center rounded-lg border text-xs ${n === page ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:bg-accent'}`}>{n}</button>
-            ))}
+            {getPageWindow(page, pages).map((n, i) =>
+              n === '...' ? (
+                <span key={`ellipsis-${i}`} className="px-1 text-xs text-muted-foreground">…</span>
+              ) : (
+                <button key={n} aria-label={`Page ${n}`} onClick={() => setPage(n as number)} className={`grid size-8 place-items-center rounded-lg border text-xs ${n === page ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:bg-accent'}`}>{n}</button>
+              )
+            )}
             <button aria-label="Next page" disabled={page === pages} onClick={() => setPage(p => p + 1)} className="grid size-8 place-items-center rounded-lg border border-border disabled:opacity-40"><ArrowRight size={14} /></button>
           </div>
         </div>
       )}
     </Shell>
   )
-}
+} 
 export function DuplicateMatchPanel({ project }: { project: Project }) { const match = project.duplicateMatch; if (!match) return null; return <Panel title="Potential duplicate match" note="Requires human verification"><div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-stretch"><div className="rounded-xl border border-border p-4"><p className="text-xs text-muted-foreground">Current project</p><p className="mt-2 font-semibold">{project.name}</p><p className="mt-1 text-xs text-muted-foreground">{project.id}</p></div><div className="flex flex-col items-center justify-center rounded-xl bg-risk-medium/10 px-5 py-3 text-center"><p className="text-2xl font-bold text-risk-medium"><CountUp value={match.similarityScore} />%</p><p className="text-xs text-muted-foreground">similarity</p></div><div className="rounded-xl border border-border p-4"><p className="text-xs text-muted-foreground">Matched project</p><p className="mt-2 font-semibold">{match.matchedProjectName}</p><p className="mt-1 text-xs text-muted-foreground">{match.matchedProjectId}</p></div></div><p className="mt-4 text-sm leading-relaxed text-muted-foreground"><span className="font-medium text-foreground">Why it surfaced:</span> {match.reason}</p></Panel> }
 export function Investigation({ project }: { project: Project }) { return <Shell><Link href="/projects" className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft size={15} /> Back to registry</Link><PageHeading eyebrow="Project investigation / 03" title={project.name} description={`${project.id} · ${project.location}, ${project.region}`} action={<span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${project.isFlagged ? 'bg-risk-medium/10 text-risk-medium' : 'bg-risk-low/10 text-risk-low'}`}>{project.isFlagged ? 'Flagged for review' : 'No active flags'}</span>} /><div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]"><Panel title="Risk score" note="Explainable indicator"><div className="flex items-center gap-6"><div className={`grid size-32 place-items-center rounded-full border-[12px] ${project.riskTier === 'high' ? 'border-risk-high/30 text-risk-high' : project.riskTier === 'medium' ? 'border-risk-medium/30 text-risk-medium' : 'border-risk-low/30 text-risk-low'}`}><span className="text-3xl font-bold"><CountUp value={project.riskScore} /></span></div><div><p className="font-semibold capitalize">{project.riskTier} priority</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{project.isFlagged ? 'This project shows unusual behavior compared with similar works and requires human verification.' : 'No unusual behavior is currently surfaced by the screening rules.'}</p></div></div></Panel><Panel title="Key financials"><div className="grid grid-cols-2 gap-5">{[['Sanctioned', formatINR(project.sanctionedAmount)], ['Released', formatINR(project.releasedAmount)], ['Utilized', formatINR(project.utilizedAmount)], ['Planned duration', `${project.plannedDuration} days`]].map(([a, b]) => <div key={a}><p className="text-xs text-muted-foreground">{a}</p><p className="mt-1 text-lg font-semibold">{b}</p></div>)}</div></Panel></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><Panel title="Why this was flagged" note="Plain-English explanation">{project.anomalies?.length ? <div className="space-y-3">{project.anomalies.map((a, i) => <div key={`${a.type}-${i}`} className="rounded-xl bg-accent p-4"><div className="flex items-center justify-between"><p className="font-medium capitalize">{a.type.replaceAll('_', ' ')}</p><span className="text-xs text-muted-foreground">{Math.round(a.confidence * 100)}% confidence</span></div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{a.explanation}</p></div>)}</div> : <p className="text-sm text-muted-foreground">No active screening signals. Continue routine monitoring.</p>}</Panel><Panel title="Project timeline"><div className="space-y-4 text-sm"><div><p className="text-xs text-muted-foreground">Sanctioned</p><p className="mt-1">{project.sanctionedDate}</p></div><div><p className="text-xs text-muted-foreground">Work started</p><p className="mt-1">{project.workStartDate ?? 'Not started'}</p></div><div><p className="text-xs text-muted-foreground">Completed</p><p className="mt-1">{project.completedDate ?? 'In progress'}</p></div></div></Panel></div>{project.duplicateMatch && <div className="mt-5"><DuplicateMatchPanel project={project} /></div>}<p className="mt-8 text-center text-xs text-muted-foreground">This is an explainable screening signal, not a finding. Verify against source records before taking action.</p></Shell> }
 
