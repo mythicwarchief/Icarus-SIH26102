@@ -7,3 +7,8 @@ out/
 frontend.zip
 backend.zip
 ml.zip
+node_modules/
+.next/
+out/
+.env*.local
+*.tsbuildinfo
