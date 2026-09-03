@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from 'next-themes'
 import { ArrowLeft, ArrowRight, ArrowUpRight, Bell, ChevronRight, CircleHelp, FolderKanban, LayoutDashboard, ListFilter, LogOut, Menu, Moon, RotateCcw, Search, Settings, ShieldCheck, Sun, TrendingUp, X } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from 'recharts'
-import { formatINR, monthlyTrend, regionalRisk, statusLabels, type Project, type ProjectStatus, type RiskTier } from '@/lib/types'
+import { formatINR, statusLabels, type Project, type ProjectStatus, type RiskTier } from '@/lib/types'
+import { computeRegionalRisk, computeMonthlyTrend } from '@/services/analyticsAdapter'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { MetricCardsSkeleton, RegistryRowSkeleton, RiskGaugeSkeleton, ErrorPanel, Skeleton } from '@/components/LoadingStates'
 import { CostEstimatePanel, DelayRiskPanel, DuplicateIntelligencePanel } from '@/components/intelligence/InnovationPanels'
@@ -322,7 +323,30 @@ export function AnomalyChart() {
     </Reveal>
   )
 }
-export function TrendMini() { return <Reveal><Panel title="Flagging activity" note="Last 6 months"><div className="h-64"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthlyTrend}><CartesianGrid vertical={false} strokeDasharray="3 3" /><XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis hide /><Tooltip /><Line type="monotone" dataKey="flagged" stroke="#c95c4b" strokeWidth={3} dot={false} animationDuration={800} animationEasing="ease-out" /><Line type="monotone" dataKey="reviewed" stroke="#2f8f83" strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" /></LineChart></ResponsiveContainer></div></Panel></Reveal> }
+export function TrendMini() {
+  const { data: works, loading, error, retry } = useAsyncData(() => getAllScoredWorksComplete(), [])
+  if (loading) return <Panel title="Flagging activity" note="By sanction month"><Skeleton className="h-64 w-full" /></Panel>
+  if (error || !works) return <Panel title="Flagging activity" note="By sanction month"><ErrorPanel message={error ?? 'No data available.'} onRetry={retry} /></Panel>
+  const trend = computeMonthlyTrend(works)
+  return (
+    <Reveal>
+      <Panel title="Flagging activity" note="By sanction month">
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trend}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis hide />
+              <Tooltip />
+              <Line type="monotone" dataKey="flagged" stroke="#c95c4b" strokeWidth={3} dot={false} animationDuration={800} animationEasing="ease-out" />
+              <Line type="monotone" dataKey="sanctioned" stroke="#2f8f83" strokeWidth={2} dot={false} animationDuration={800} animationEasing="ease-out" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Panel>
+    </Reveal>
+  )
+}
 export function Panel({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) { return <section className="rounded-2xl border border-border bg-card p-5 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">{title}</h2>{note && <span className="text-xs text-muted-foreground">{note}</span>}</div>{children}</section> }
 export function Queue() {
   const { data, loading, error, retry } = useAsyncData(() => getHighRiskAnomalies(6), [])
@@ -470,4 +494,65 @@ export function InvestigationWithLoading({ workId }: { workId: string }) {
   )
 }
 
-export function Analytics() { return <Shell><PageHeading eyebrow="Analytics / 04" title="Portfolio trends" description="Understand how screening signals and expenditure patterns move across the portfolio." /><div className="grid gap-5 lg:grid-cols-2"><Panel title="Flagging and review trend" note="Monthly activity"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthlyTrend}><CartesianGrid vertical={false} strokeDasharray="3 3" /><XAxis dataKey="month" /><YAxis /><Tooltip /><Line dataKey="flagged" name="Flagged" stroke="#c95c4b" strokeWidth={3} animationDuration={800} animationEasing="ease-out" /><Line dataKey="reviewed" name="Reviewed" stroke="#2f8f83" strokeWidth={3} animationDuration={800} animationEasing="ease-out" /></LineChart></ResponsiveContainer></div></Panel><Panel title="Regional risk index" note="Relative indicator"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={regionalRisk}><CartesianGrid vertical={false} strokeDasharray="3 3" /><XAxis dataKey="region" tick={{ fontSize: 10 }} /><YAxis /><Tooltip /><Bar dataKey="risk" name="Risk index" fill="#d89b3d" radius={[5, 5, 0, 0]} animationDuration={800} animationEasing="ease-out" /></BarChart></ResponsiveContainer></div></Panel></div></Shell> }
+export function Analytics() {
+  const { data: works, loading, error, retry } = useAsyncData(() => getAllScoredWorksComplete(), [])
+
+  if (loading) {
+    return (
+      <Shell>
+        <PageHeading eyebrow="Analytics / 04" title="Portfolio trends" description="Understand how screening signals and expenditure patterns move across the portfolio." />
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Panel title="Flagging and review trend" note="By sanction month"><Skeleton className="h-80 w-full" /></Panel>
+          <Panel title="Regional risk index" note="By state"><Skeleton className="h-80 w-full" /></Panel>
+        </div>
+      </Shell>
+    )
+  }
+
+  if (error || !works) {
+    return (
+      <Shell>
+        <PageHeading eyebrow="Analytics / 04" title="Portfolio trends" description="Understand how screening signals and expenditure patterns move across the portfolio." />
+        <ErrorPanel message={error ?? 'No data available.'} onRetry={retry} />
+      </Shell>
+    )
+  }
+
+  const trend = computeMonthlyTrend(works)
+  const regional = computeRegionalRisk(works)
+
+  return (
+    <Shell>
+      <PageHeading eyebrow="Analytics / 04" title="Portfolio trends" description="Understand how screening signals and expenditure patterns move across the portfolio." />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Panel title="Flagging and review trend" note="By sanction month">
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trend}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Line dataKey="flagged" name="Flagged" stroke="#c95c4b" strokeWidth={3} animationDuration={800} animationEasing="ease-out" />
+                <Line dataKey="sanctioned" name="Sanctioned" stroke="#2f8f83" strokeWidth={3} animationDuration={800} animationEasing="ease-out" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+        <Panel title="Regional risk index" note="Avg. risk score by state">
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={regional}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="region" tick={{ fontSize: 10 }} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="risk" name="Avg risk score" fill="#d89b3d" radius={[5, 5, 0, 0]} animationDuration={800} animationEasing="ease-out" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+      </div>
+    </Shell>
+  )
+}
