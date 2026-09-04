@@ -112,11 +112,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-sidebar px-5 py-6 lg:flex lg:flex-col">
         <div className="flex items-center gap-3 px-2">
           <div className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground">
-            <ShieldCheck size={20} />
+            <ShieldCheck size={26} />
           </div>
           <div>
-            <p className="font-serif text-xl font-bold tracking-tight">Nirikshan</p>
-            <p className="text-[10px] uppercase tracking-[.2em] text-muted-foreground">Authority console</p>
+            <p className="font-serif text-2xl font-bold tracking-tight">Nirikshan</p>
+            <p className="text-xs uppercase tracking-[.2em] text-muted-foreground">Authority console</p>
           </div>
         </div>
         <nav className="mt-12 space-y-1">{navLinks}</nav>
@@ -178,6 +178,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <button aria-label="Open menu" onClick={() => setMobileOpen(true)} className="grid size-9 place-items-center rounded-lg border border-border lg:hidden">
               <Menu size={17} />
             </button>
+            <div className="relative hidden md:block">
+              <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
+              <input
+                aria-label="Search projects"
+                placeholder="Search projects, locations..."
+                className="h-9 w-72 rounded-lg border border-input bg-card pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
