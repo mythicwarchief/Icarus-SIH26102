@@ -178,14 +178,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <button aria-label="Open menu" onClick={() => setMobileOpen(true)} className="grid size-9 place-items-center rounded-lg border border-border lg:hidden">
               <Menu size={17} />
             </button>
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
-              <input
-                aria-label="Search projects"
-                placeholder="Search projects, locations..."
-                className="h-9 w-72 rounded-lg border border-input bg-card pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
